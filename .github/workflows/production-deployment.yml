@@ -1,6 +1,7 @@
 name: Production Deployment
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -10,21 +11,52 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Set up test server
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_KEY_NAME: ${{ secrets.AWS_KEY_NAME }}
+          SECURITY_GROUP_ID: ${{ secrets.SECURITY_GROUP_ID }}
+          SUBNET_ID: ${{ secrets.SUBNET_ID }}
+        run: |
+          INSTANCE_IDS=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=TestServer" "Name=instance-state-name,Values=running,stopped" \
+            --query "Reservations[].Instances[].InstanceId" --output text)
+
+          if [ -n "$INSTANCE_IDS" ]; then
+            aws ec2 terminate-instances --instance-ids $INSTANCE_IDS
+            aws ec2 wait instance-terminated --instance-ids $INSTANCE_IDS
+          fi
+
+          INSTANCE_ID=$(aws ec2 run-instances \
+            --image-id ami-0b2f6494ff0b07a0e \
+            --instance-type t3.micro \
+            --key-name "$AWS_KEY_NAME" \
+            --security-group-ids "$SECURITY_GROUP_ID" \
+            --subnet-id "$SUBNET_ID" \
+            --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=TestServer}]' \
+            --query "Instances[0].InstanceId" --output text)
+
+          aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+          PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query "Reservations[0].Instances[0].PublicIpAddress" --output text)
+          echo "PUBLIC_IP=$PUBLIC_IP" >> $GITHUB_ENV
+
       - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
+          host: ${{ vars.PUBLIC_IP }}
+          username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Pull the latest image from Docker Hub
-            docker pull ${{ secrets.DOCKER_USERNAME }}/nodejs-demo-app:latest
+            sudo apt-get update -y && sudo apt-get install -y docker.io
+            sudo systemctl enable docker
+            sudo systemctl start docker
 
-            # Stop and remove the existing container if it exists
+            docker pull ${{ secrets.DOCKER_USERNAME }}/nodejs-demo-app:latest
             docker stop nodejs-demo-app || true
             docker rm nodejs-demo-app || true
-
-            # Run the new container
             docker run -d \
               --name nodejs-demo-app \
               -p 80:5000 \
