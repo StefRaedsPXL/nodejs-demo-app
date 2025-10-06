@@ -23,7 +23,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: user/app:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/nodejs-demo-app:latest
 
       - name: Setup Node.js enviroment
         uses: actions/setup-node@v4
