@@ -1,0 +1,32 @@
+name: Test Deployment
+
+on: workflow_dispatch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest2
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Pull the latest image from Docker Hub
+            docker pull ${{ secrets.DOCKER_USERNAME }}/nodejs-demo-app:latest
+
+            # Stop and remove the existing container if it exists
+            docker stop nodejs-demo-app || true
+            docker rm nodejs-demo-app || true
+
+            # Run the new container
+            docker run -d \
+              --name nodejs-demo-app \
+              -p 80:5000 \
+              -e NODE_ENV=production \
+              ${{ secrets.DOCKER_USERNAME }}/nodejs-demo-app:latest
