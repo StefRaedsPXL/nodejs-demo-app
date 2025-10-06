@@ -1,0 +1,19 @@
+name: Dependencies Example
+
+on: [push]
+
+jobs:
+  checkout-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout 
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js enviroment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '15.x'
+        
+      - name: verification
+        run: ls -alhR
