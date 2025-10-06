@@ -25,7 +25,6 @@ jobs:
 
       - name: Code coverage report
         uses: dorny/test-reporter@v2
-        if: ${{ !cancelled() }}       # run this step even if previous step failed
         with:
           name: JEST Tests            # Name of the check run which will be created
           path: reports/jest-*.xml    # Path to test results
